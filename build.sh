@@ -9,6 +9,7 @@ buildStrings=true
 fetchImages=false
 buildImages=false
 compile=false
+debug=false
 
 if [ ! -f "$DIR/tools/modseekmap"  -o  ! -f "$DIR/tools/Gpda.class" ]; then
     compile=true
@@ -22,6 +23,8 @@ do
         --no-fetch-strings) fetchStrings=false
             ;;
         --no-build-strings) buildsStrings=false
+            ;;
+        --debug) debug=true
             ;;
         --*) echo "unknown option $1"
             ;;
@@ -70,6 +73,12 @@ if $buildStrings; then
         echo -n .
     done
     echo ""
+
+    if $debug; then
+        echo ">> debug mode"
+        cp $DIR/misc/_0000ESS1_debug.obj $DIR/data/obj/_0000ESS1.obj
+    fi
+
     echo ">> compress .obj"
     cd $DIR/data/obj
     gzip -n9 -f *.obj
