@@ -1,9 +1,30 @@
 import struct
+from math import ceil
 from util import *
 
+class Block():
+    def __init__(self, id, data):
+        self.id = id
+        self.data = data
+
+    def write(self):
+        c = len(self.data) + 6
+        additional_zeros = ceil(c / 16) * 16 - c
+        return struct.pack('<I', len(self.data) + 6 + additional_zeros) + struct.pack('<H', self.id) + self.data + b"\x00" * additional_zeros
+
+def make_string(s):
+    return struct.pack("<I", len(s)) + s.encode("utf-16le") + b"\x00" * 10
+
+# jump is 10 00 00 00 BE 02 xx xx xx xx ## ## ## ## ## ##
+def jump(id):
+    return Block(0x2be, struct.pack('<I', id) + b"\x00" * 6)
+
 class x64():
-    def __init__(self, data):
+    id = 0x64
+    def __init__(self, data, pos, cnt):
         self.read(data)
+        self.pos = pos
+        self.cnt = cnt
 
     def read(self, data):
         self.magic = data[0:4]
@@ -12,14 +33,27 @@ class x64():
         self.tail = data[8 + length:]
 
     def write(self):
-        return self.magic + struct.pack("<I", len(self.string)) + self.string.encode("utf-16le") + self.tail
+        strings = self.string.split("\n")
+        first = Block(self.id, self.magic + make_string(strings[0]))
+        if len(strings) == 1:
+            return first, []
+        # local jump to end
+        tail = [first]
+        first = jump(self.cnt)
+        for s in strings[1:]:
+            tail.append(Block(self.id, b"\xff\xff\xff\xff" + make_string(s)))
+        # jump back
+        tail.append(jump(self.pos + 1))
+        return first, tail
 
     def __str__(self):
         return "%s" % self.string
 
-x68 = x64
+class x68(x64):
+    id = 0x68
 
 class x67():
+    id = 0x67
     def __init__(self, data):
         self.read(data)
 
@@ -59,7 +93,7 @@ class x67():
                 data += t.encode("utf-16le")
 
         data += self.tail
-        return data
+        return Block(self.id, data), []
 
     def __str__(self):
         s = ""
@@ -68,6 +102,7 @@ class x67():
         return s
 
 class x2e01():
+    id = 0x12e
     def __init__(self, data):
         self.read(data)
 
@@ -77,12 +112,13 @@ class x2e01():
         self.tail = data[4 + length:]
 
     def write(self):
-        return struct.pack("<I", len(self.string)) + self.string.encode("utf-16le") + self.tail
+        return Block(self.id, struct.pack("<I", len(self.string)) + self.string.encode("utf-16le") + self.tail), []
 
     def __str__(self):
         return self.string
 
 class x2303():
+    id = 0x323
     def __init__(self, data):
         self.read(data)
 
@@ -116,7 +152,7 @@ class x2303():
             if x != 0:
                 data += self.magic[x]
         data += self.tail
-        return data
+        return Block(self.id, data), []
 
     def __str__(self):
         return str(self.strings)
