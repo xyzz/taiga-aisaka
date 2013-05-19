@@ -1,1 +1,3 @@
-http://toradora.minetest.ru/
+http://toradora.xyz.is/
+
+\#toradora @ irc.rizon.net
