@@ -21,10 +21,13 @@ def jump(id):
 
 class x64():
     id = 0x64
-    def __init__(self, data, pos, cnt):
+    def __init__(self, data, pos, cnt, d, xpos):
         self.read(data)
         self.pos = pos
         self.cnt = cnt
+        # meh, dirty hacks
+        self.d = d
+        self.xpos = xpos
 
     def read(self, data):
         self.magic = data[0:4]
@@ -40,6 +43,8 @@ class x64():
         # local jump to end
         tail = [first]
         first = jump(self.cnt)
+        self.d.blocks.append(self.d.blocks[self.xpos])
+        self.d.blocks[self.xpos] = ""
         for s in strings[1:]:
             tail.append(Block(self.id, b"\xff\xff\xff\xff" + make_string(s)))
         # jump back

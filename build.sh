@@ -10,6 +10,9 @@ fetchImages=false
 buildImages=false
 compile=false
 debug=false
+fetchMenu=false
+buildMenu=false
+fast=false
 
 if [ ! -f "$DIR/tools/modseekmap"  -o  ! -f "$DIR/tools/Gpda.class" ]; then
     compile=true
@@ -22,9 +25,19 @@ do
             ;;
         --no-fetch-strings) fetchStrings=false
             ;;
-        --no-build-strings) buildsStrings=false
+        --no-build-strings) buildStrings=false
             ;;
         --debug) debug=true
+            ;;
+        --fetch-menu) fetchMenu=true
+            ;;
+        --no-fetch-menu) fetchMenu=false
+            ;;
+        --build-menu) buildMenu=true
+            ;;
+        --no-build-menu) buildMenu=false
+            ;;
+        --fast) fast=true
             ;;
         --*) echo "unknown option $1"
             ;;
@@ -39,13 +52,15 @@ if $compile; then
     javac Gpda.java || exit
 fi
 
-echo ">> Clean working dir"
+if ! $fast; then
+    echo ">> Clean working dir"
 
-rm -rf $DIR/out/first*
-rm -rf $DIR/out/resource*
+    rm -rf $DIR/out/first*
+    rm -rf $DIR/out/resource*
 
-cp -r $DIR/source/first* $DIR/out/
-cp -r $DIR/source/resource* $DIR/out/
+    cp -r $DIR/source/first* $DIR/out/
+    cp -r $DIR/source/resource* $DIR/out/
+fi
 
 if $fetchStrings; then
     echo ">> Fetching strings"
@@ -63,33 +78,59 @@ if $buildStrings; then
         echo -n .
     done
     echo ""
+fi
 
-    echo ">> repack .obj"
-    # copy old ones
-    find $DIR/source/resource/script.dat/ -name "*.obj.gz" -exec cp {} . \;
-    gunzip -f *.gz
+echo ">> repack .obj"
+# copy old ones
+cd $DIR/data/strings
+find $DIR/source/resource/script.dat/ -name "*.obj.gz" -exec cp {} . \;
+find $DIR/source/resource/script.dat/ -name "*.dat.gz" -exec cp {} . \;
+gunzip -f *.gz
+
+if $buildStrings; then
+    cd $DIR/data/strings
     for x in *.obj; do
-        $PYTHON $DIR/tools/repack.py $x $DIR/data/obj/$x >/dev/null || exit
+        name=$(echo $x | sed s/.obj$//g)
+        $PYTHON $DIR/tools/repack.py $name $DIR/data/obj/$name >/dev/null || exit
         echo -n .
     done
     echo ""
-
-    if $debug; then
-        echo ">> debug mode"
-        cp $DIR/misc/_0000ESS1_debug.obj $DIR/data/obj/_0000ESS1.obj
-    fi
-
-    echo ">> compress .obj"
-    cd $DIR/data/obj
-    gzip -n9 -f *.obj
-    echo ">> replace .obj.gz"
-    for x in *.obj.gz; do
-        name=$(echo $x | sed s/.obj.gz$//g)
-        cp $x $DIR/out/resource/script.dat/$name.dat/$name.dat_1/$name.obj.gz
+else
+    cd $DIR/data/strings
+    # just copy em
+    for x in *.obj; do
+        cp $x $DIR/data/obj/$x
         echo -n .
+    done
+    for x in *.dat; do
+        cp $x $DIR/data/obj/$x
     done
     echo ""
 fi
+
+if $debug; then
+    echo ">> debug mode"
+    cp $DIR/misc/_0000ESS1_debug.obj $DIR/data/obj/_0000ESS1.obj
+fi
+
+echo ">> compress .obj"
+cd $DIR/data/obj
+gzip -n9 -f *.obj
+echo ">> replace .obj.gz"
+for x in *.obj.gz; do
+    name=$(echo $x | sed s/.obj.gz$//g)
+    cp $x $DIR/out/resource/script.dat/$name.dat/$name.dat_1/$name.obj.gz
+    echo -n .
+done
+echo ""
+gzip -n9 -f *.dat
+echo ">> replace .dat"
+for x in *.dat.gz; do
+    name=$(echo $x | sed s/.dat.gz$//g)
+    cp $x $DIR/out/resource/script.dat/$name.dat/$name.dat_1/$name.dat.gz
+    echo -n .
+done
+echo ""
 
 echo ">> Packing resource.dat"
 cd $DIR/out
@@ -102,6 +143,21 @@ cp $DIR/tools/seekmap.new $DIR/out/first
 cd $DIR/out/first
 gzip -n9 seekmap.new
 mv seekmap.new.gz seekmap.dat
+
+if $fetchMenu; then
+    echo ">> Fetching menu text"
+    curl http://t.minetest.ru/projects/toradora-portable/utf16/en/download/ > $DIR/data/menu.po
+    po2txt $DIR/data/menu.po $DIR/data/menu.tmp --fuzzy 2>/dev/null || exit
+    sed 'n;d;' $DIR/data/menu.tmp > $DIR/data/menu.txt
+fi
+
+if $buildMenu; then
+    echo ">> Building menu"
+    unix2dos $DIR/data/menu.txt
+    iconv -f utf8 -t utf16le $DIR/data/menu.txt > $DIR/data/menu.done
+    gzip -n9 -f $DIR/data/menu.done
+    cp $DIR/data/menu.done.gz $DIR/out/first/text.dat/utf16.txt.gz
+fi
 
 echo ">> Packing first.dat"
 cd $DIR/out
