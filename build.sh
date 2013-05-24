@@ -37,6 +37,10 @@ do
             ;;
         --no-build-menu) buildMenu=false
             ;;
+        --build-images) buildImages=true
+            ;;
+        --no-build-images) buildImages=false
+            ;;
         --fast) fast=true
             ;;
         --*) echo "unknown option $1"
@@ -131,6 +135,23 @@ for x in *.dat.gz; do
     echo -n .
 done
 echo ""
+
+if $buildImages; then
+    echo ">> building images"
+    cp -r $DIR/images $DIR/data
+    # build sg_title
+    cd $DIR/data/images/sg_title
+    for x in *.png; do
+        # this is to convert "Color Type" to "Palette"
+        # which makes .gim output much smaller
+        pngquant $x -f --ext .png
+        wine $DIR/nonfree/gimconv/GimConv.exe $x -o $x.gim --format_endian little
+        mv $x.gim $(echo $x|sed s/.png$//).gim
+        echo -n .
+    done
+    gzip -n9 -f *.gim
+    cp *.gim.gz $DIR/out/first/image_sharing.dat/
+fi
 
 echo ">> Packing resource.dat"
 cd $DIR/out
