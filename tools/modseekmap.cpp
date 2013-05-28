@@ -104,7 +104,7 @@ void ParseGPDA(unsigned _int32 CurrOffset, int Nesting)
 		InRes.read((char*)&NameSize, 4);
 
 		char *FileName;
-		FileName = new char[NameSize];
+		FileName = new char[NameSize + 1];
 
 		InRes.read(FileName, NameSize);
 
