@@ -1,3 +1,6 @@
+// Source: http://forums.novelnews.net/showpost.php?p=68778&postcount=18
+// Author: k-wng
+// License: unknown
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

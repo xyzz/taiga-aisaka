@@ -1,3 +1,6 @@
+// Source: http://sourceforge.net/projects/oreimo/
+// Author: RoByte
+// License: unknown
 #include <iostream>
 #include <fstream>
 #include <string>
