@@ -180,12 +180,6 @@ class x2303():
         self.tail = data[pos:]
 
     def write(self):
-        # works but allows to select same option multiple times and sets visited flag on next entry
-        #self.cnt += 1
-        #self.strings.append("wobwobwob?")
-        #self.magic.append(self.magic[-1])
-        #self.magic[-1] = b"\x00" * len(self.magic[-1])
-
         data = b""
         data += struct.pack("<I", self.head)
         data += struct.pack("<I", self.cnt)
