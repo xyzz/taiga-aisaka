@@ -1,4 +1,5 @@
 import struct
+import sys
 from math import ceil
 from util import *
 
@@ -13,11 +14,22 @@ class Block():
         return struct.pack('<I', len(self.data) + 6 + additional_zeros) + struct.pack('<H', self.id) + self.data + b"\x00" * additional_zeros
 
 def make_string(s):
+    if s[-1] == "}":
+        s = s[:s.find("{")]
     return struct.pack("<I", len(s)) + s.encode("utf-16le") + b"\x00" * 10
 
 # jump is 10 00 00 00 BE 02 xx xx xx xx ## ## ## ## ## ##
 def jump(id):
     return Block(0x2be, struct.pack('<I', id) + b"\x00" * 6)
+
+def parse_params(s):
+    a, b = s[s.find("{") + 1:-1].split(";")
+    c = bin(int(b, 16))[3:]
+    return a, "{},{}".format(len(c) * 85, c)
+
+# there are 21343 sounds in stock voice.afs and we're pushing custom ones to the back
+def sound(x):
+    return struct.pack("<H", x + 21343)
 
 class x64():
     id = 0x64
@@ -30,23 +42,43 @@ class x64():
         self.xpos = xpos
 
     def read(self, data):
-        self.magic = data[0:4]
+        self.sound = data[0:2]
+        self.anim = data[2:4]
         length = struct.unpack("<I", data[4:8])[0] * 2
         self.string = data[8:8 + length].decode("utf-16le")
         self.tail = data[8 + length:]
 
     def write(self):
         strings = self.string.split("\n")
-        first = Block(self.id, self.magic + make_string(strings[0]))
+        first = Block(self.id, self.sound + self.anim + make_string(strings[0]))
         if len(strings) == 1:
             return first, []
+        sys.stderr.write("%s from %s [sound id: %d]\n" % (self.string, self.d.blocks[self.xpos], struct.unpack("<H", self.sound)[0]))
+        if strings[0][-1] == "}":
+            sound_id, dat = parse_params(strings[0])
+            if sound_id == "":
+                snd = self.sound
+            else:
+                snd = sound(int(sound_id))
+            self.d.blocks.append((snd, dat))
+            first = Block(self.id, snd + self.anim + make_string(strings[0]))
+        else:
+            self.d.blocks.append((self.sound, self.d.blocks[self.xpos]))
+
+        self.d.blocks[self.xpos] = ""
+
         # local jump to end
         tail = [first]
         first = jump(self.cnt)
-        self.d.blocks.append(self.d.blocks[self.xpos])
-        self.d.blocks[self.xpos] = ""
+
         for s in strings[1:]:
-            tail.append(Block(self.id, b"\xff\xff\xff\xff" + make_string(s)))
+            if s[-1] == "}":
+                sound_id, dat = parse_params(s)
+                magic = sound(int(sound_id)) + self.anim
+                self.d.blocks.append((sound(int(sound_id)), dat))
+            else:
+                magic = b"\xff\xff\xff\xff"
+            tail.append(Block(self.id, magic + make_string(s)))
         # jump back
         tail.append(jump(self.pos + 1))
         return first, tail
@@ -148,6 +180,12 @@ class x2303():
         self.tail = data[pos:]
 
     def write(self):
+        # works but allows to select same option multiple times and sets visited flag on next entry
+        #self.cnt += 1
+        #self.strings.append("wobwobwob?")
+        #self.magic.append(self.magic[-1])
+        #self.magic[-1] = b"\x00" * len(self.magic[-1])
+
         data = b""
         data += struct.pack("<I", self.head)
         data += struct.pack("<I", self.cnt)

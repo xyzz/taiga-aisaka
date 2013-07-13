@@ -1,3 +1,4 @@
+# coding: utf-8
 from sys import argv
 from util import *
 import os.path
@@ -5,6 +6,19 @@ import struct
 
 import parser
 import dat
+
+# run some automatic checks related to typesetting
+def typecheck(s, t):
+    errors = []
+    if "~" in s:
+        errors.append("W: ~, use ～")
+    if "！" in s:
+        errors.append("W: ！, use !")
+    if "？" in s:
+        errors.append("W: ？, use ?")
+    if len(errors):
+        print("At %s" % t)
+        print("\n".join(errors))
 
 def main():
     filename = argv[1]
@@ -18,6 +32,7 @@ def main():
         cur = ""
         strings = []
         for line in open(filename + ".obj.po.out", "r", encoding="utf-8").readlines():
+            line = line.replace("…", "...")
             if line[-1] == "\x0a":
                 line = line[:-1]
             if line == "":
@@ -27,8 +42,10 @@ def main():
                 cur += line + "\n"
         if cur != "":
             strings.append(cur[:-1])
-        #print(strings)
-        #return
+
+        for x in range(len(strings)):
+            typecheck(strings[x], "%s:%d" % (filename, x))
+
         blocks = []
         tail = []
         cnt = uint32(fin)
@@ -49,16 +66,16 @@ def main():
                 if cur < len(strings):
                     tmp.string = strings[cur]
                 cur += 1
-                if tmp.magic != b"\xff" * 4:
+                if tmp.sound + tmp.anim != b"\xff" * 4:
                     xpos += 1
             elif t == 0x68:
                 tmp = parser.x68(fin.read(size - 6), pos, cnt, d, xpos)
                 if cur < len(strings):
                     tmp.string = strings[cur]
                 cur += 1
-                if tmp.magic != b"\xff" * 4:
+                if tmp.sound + tmp.anim != b"\xff" * 4:
                     xpos += 1
-            elif t == 0x67:
+            elif t == 0x67 or t == 0x69:
                 tmp = parser.x67(fin.read(size - 6))
                 for x in range(tmp.cnt):
                     if cur < len(strings):
@@ -92,12 +109,18 @@ def main():
             fout.write(b.write())
         fout.close()
 
-        print("replaced %d lines" % cur)
-
         x = 0
+        was = set()
         while True:
             if x >= len(d.blocks):
                 break
+            if type(d.blocks[x]) == tuple:
+                if d.blocks[x][0] in was:
+                    del d.blocks[x]
+                    continue
+                else:
+                    was.add(d.blocks[x][0])
+                    d.blocks[x] = d.blocks[x][1]
             if d.blocks[x] == "":
                 del d.blocks[x]
             else:

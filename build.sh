@@ -3,6 +3,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PYTHON="python"
 GPDA="java -cp $DIR/tools Gpda"
+GIMCONV="wine $DIR/nonfree/gimconv/GimConv.exe"
 
 fetchStrings=true
 buildStrings=true
@@ -12,6 +13,7 @@ compile=false
 debug=false
 fetchMenu=false
 buildMenu=false
+buildVoice=false
 fast=false
 
 if [ ! -f "$DIR/tools/modseekmap"  -o  ! -f "$DIR/tools/Gpda.class" ]; then
@@ -41,6 +43,10 @@ do
             ;;
         --no-build-images) buildImages=false
             ;;
+        --build-voice) buildVoice=true
+            ;;
+        --no-build-voice) buildVoice=false
+            ;;
         --fast) fast=true
             ;;
         --*) echo "unknown option $1"
@@ -56,6 +62,14 @@ if $compile; then
     javac Gpda.java || exit
 fi
 
+echo ">> Cleaning up"
+rm "$DIR/out/EBOOT.BIN"
+rm "$DIR/out/first.dat"
+rm "$DIR/out/first.dat.txt"
+rm "$DIR/out/resource.dat"
+rm "$DIR/out/resource.dat.txt"
+rm "$DIR/out/voice.afs"
+
 if ! $fast; then
     echo ">> Clean working dir"
 
@@ -64,6 +78,26 @@ if ! $fast; then
 
     cp -r $DIR/source/first* $DIR/out/
     cp -r $DIR/source/resource* $DIR/out/
+fi
+
+if $buildVoice; then
+    echo ">> Building sounds"
+    rm -rf $DIR/data/voice
+    rm -rf $DIR/data/voice-mine
+    cp -r $DIR/source/voice $DIR/data
+    cp -r $DIR/source/voice-mine $DIR/data
+    echo ">> .wav -> .ahx"
+    cd $DIR/data/voice-mine
+    for x in *.wav; do
+        wine $DIR/nonfree/ahxencd/ahxencd.exe $x
+    done
+    cp *.ahx $DIR/data/voice
+    echo ">> building .afs"
+    cd $DIR/data
+    find voice/* | sort > $DIR/data/voice.map
+    $DIR/nonfree/afslnk/afslnk voice.map -odir=../out/ voice.afs
+    echo ">> patching EBOOT.BIN"
+    $PYTHON $DIR/tools/patch-eboot.py $DIR/source/EBOOT.BIN $(ls -1 $DIR/data/voice | wc -l) $DIR/out/EBOOT.BIN
 fi
 
 if $fetchStrings; then
@@ -95,7 +129,7 @@ if $buildStrings; then
     cd $DIR/data/strings
     for x in *.obj; do
         name=$(echo $x | sed s/.obj$//g)
-        $PYTHON $DIR/tools/repack.py $name $DIR/data/obj/$name >/dev/null || exit
+        $PYTHON $DIR/tools/repack.py $name $DIR/data/obj/$name || exit
         echo -n .
     done
     echo ""
@@ -145,13 +179,24 @@ if $buildImages; then
         # this is to convert "Color Type" to "Palette"
         # which makes .gim output much smaller
         pngquant $x -f --ext .png
-        wine $DIR/nonfree/gimconv/GimConv.exe $x -o $x.gim --format_endian little
+        $GIMCONV $x -o $x.gim --format_endian little
         mv $x.gim $(echo $x|sed s/.png$//).gim
         echo -n .
     done
     gzip -n9 -f *.gim
     cp *.gim.gz $DIR/out/first/image_sharing.dat/
+
+    cd $DIR/modules/sprites
+    sh do.sh
+    gzip -n9f out.txt
+    pngquant out.png -f --ext .png
+    $GIMCONV out.png -o out.gim --format_endian little
+    gzip -n9f out.gim
+    cp out.gim.gz $DIR/out/resource/image_main.dat/sg_chaname.gim.gz
+    cp out.txt.gz $DIR/out/first/text.dat/charaname.txt.gz
 fi
+
+cp $DIR/Bhelp_00en.gim.gz $DIR/out/resource/image_block.dat/image_block_title.dat/bhelp_00.gim.gz
 
 echo ">> Packing resource.dat"
 cd $DIR/out
@@ -183,5 +228,13 @@ fi
 echo ">> Packing first.dat"
 cd $DIR/out
 $GPDA first.dat.txt >/dev/null
+
+echo ">> Building .ISO"
+cd $DIR/out
+mv EBOOT.BIN iso/PSP_GAME/SYSDIR/EBOOT.BIN
+mv first.dat iso/PSP_GAME/USRDIR/first.dat
+mv resource.dat iso/PSP_GAME/USRDIR/resource.dat
+mv voice.afs iso/PSP_GAME/USRDIR/voice.afs
+mkisofs -sort filelist.txt -iso-level 4 -xa -A "PSP GAME" -V "Toradora" -sysid "PSP GAME" -volset "Toradora" -p "" -publisher "" -o out.iso iso/
 
 echo "== Done!"
